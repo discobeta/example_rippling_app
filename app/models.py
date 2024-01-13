@@ -8,7 +8,6 @@ class BaseModel(models.Model):
     created_at = models.DateTimeField(editable=False, auto_now_add=True)
     updated_at = models.DateTimeField(
         editable=False, default=datetime.datetime.now)
-    deleted = models.BooleanField(default=False)
     user = models.ForeignKey(
         get_user_model(),
         on_delete=models.CASCADE,
@@ -17,6 +16,24 @@ class BaseModel(models.Model):
 
     class Meta:
         abstract = True
+
+    def to_dict(self):
+        fields = self._meta.get_fields()
+        data = {}
+        for field in fields:
+            field_type = field.get_internal_type()
+            try:
+                if field_type == 'ForeignKey':
+                    data[field.name] = getattr(self, field.name).id
+                elif field_type == 'ManyToManyField':
+                    data[field.name] = [obj.id for obj in getattr(self, field.name).all()]
+                elif field_type == 'DateTimeField':
+                    data[field.name] = getattr(self, field.name).isoformat()
+                else:
+                    data[field.name] = getattr(self, field.name)
+            except:
+                data[field.name] = None
+        return data
 
 class RipplingCompany(BaseModel):
 
@@ -71,6 +88,7 @@ class RipplingGroup(BaseModel):
     company = models.ForeignKey('app.RipplingCompany', on_delete=models.CASCADE, related_name='rippling_user_groups')
     group_id = models.CharField(max_length=255, default=None, null=False, help_text="The id of the group.")
     name = models.CharField(max_length=255, default=None, null=True, help_text="The name of the group.")
+    users = models.JSONField(default=list, null=True, help_text="The users of the group.")
 
     def __str__(self):
         return str(self.name)

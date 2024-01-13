@@ -1,6 +1,11 @@
 import json
 
+from django.conf import settings
+from django.contrib.auth import get_user_model
+from django.contrib.auth import login
+from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
+from django.http.response import HttpResponseRedirect
 
 from app.lib.rippling import RipplingIntegration
 from app.models import RipplingCompany, RipplingEmployee
@@ -15,7 +20,7 @@ def handle_app_install(request):
     if not oauth_data or oauth_data and 'error' in oauth_data:
         return JsonResponse({
             "current_user": None,
-            "oauth_data": None
+            "oauth_data": oauth_data
         })
 
     # get the current user
@@ -74,20 +79,64 @@ def handle_app_install(request):
     # make the first API call
     current_company = rippling.get_current_company()
 
-    return JsonResponse({
-        "current_user": current_user,
-        "oauth_data": oauth_data
-    })
+    # update the RipplingCompany data
+    company_record.company_name = current_company['name']
+    company_record.primary_email = current_company['primaryEmail']
+    company_record.save()
+
+    return HttpResponseRedirect(f'https://app.rippling.com/apps/{settings.RIPPLING_APP_SLUG}/settings')
 
 
 def handle_oauth_login(request):
-    return None
+    rippling = RipplingIntegration()
+
+    code = request.POST.get('code')
+    role_id = request.POST.get('roleId')
+    company_id = request.POST.get('companyId')
+
+    if not code:
+        return JsonResponse({'error': 'No code provided.'})
+
+    oauth_data = rippling.handle_oauth_redirect(request, code)
+    current_user = rippling.get_current_user()
+
+    # try to find the employee record
+    employee_record = None
+    try:
+        employee_record = RipplingEmployee.objects.get(employee_id=current_user.get('id'))
+    except:
+        return JsonResponse({'error': 'Employee not found.'})
+
+    # get the userinfo
+    user_info = rippling.get_employee(employee_record.employee_id)
+    employee_record.given_name = user_info.get('firstName')
+    employee_record.family_name = user_info.get('lastName')
+    employee_record.updated_at = user_info.get('updatedAt')
+    employee_record.created_at = user_info.get('createdAt')
+    employee_record.save(update_fields=['given_name', 'family_name', 'updated_at', 'created_at'])
+
+    # if the employee record doesn't have a user, create one
+    if not employee_record.user:
+        # create the user
+        user = get_user_model().objects.create_user(
+            username=f"{employee_record.employee_id}:{employee_record.company.company_id}",
+            email=employee_record.email,
+            first_name=employee_record.given_name,
+            last_name=employee_record.family_name,
+        )
+        employee_record.user = user
+        employee_record.save()
+
+    login(request, employee_record.user)
+    return HttpResponseRedirect('/integration/secure-page/')
 
 
 def handle_incoming_webhook(request):
     """
     Handle incoming webhooks from Rippling.
     """
+
+    print("WEBHOOK", request.POST)
 
     event_mapping = {
         'employee.created': '_webhook_employee_created',
@@ -109,3 +158,11 @@ def handle_incoming_webhook(request):
         method(request.POST)
 
     return JsonResponse({'success': True})
+
+
+@login_required
+def secure_page(request):
+    """
+    A secure page that requires a logged in user.
+    """
+    return JsonResponse({'success': True, 'user': request.user.id})

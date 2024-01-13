@@ -18,6 +18,19 @@ class RipplingIntegration:
         self.redirect_uri = settings.RIPPLING_REDIRECT_URI
         self.base_url = settings.RIPPLING_BASE_URL
 
+    def get_company_access_token(self, company_id):
+        company = RipplingCompany.objects.get(company_id=company_id)
+        if company.is_access_token_valid():
+            return company.access_token
+        else:
+            response = self.refresh_token(company.refresh_token)
+            company.access_token = response.get('access_token')
+            company.refresh_token = response.get('refresh_token')
+            company.expires_in = response.get('expires_in')
+            company.scope = response.get('scope')
+            company.save()
+            return company.access_token
+
     def _get_request_headers(self):
         headers = {
             'Accept': 'application/json'
@@ -69,8 +82,8 @@ class RipplingIntegration:
         }
         return self._execute_request('POST', url, headers=headers, data=data)
 
-    def handle_oauth_redirect(self, request):
-        code = request.GET.get('code')
+    def handle_oauth_redirect(self, request, code=None):
+        code = code or request.GET.get('code')
         if code:
             headers = {
                 'Authorization': f'Basic {b64encode(f"{self.client_id}:{self.client_secret}".encode()).decode()}'
@@ -93,8 +106,32 @@ class RipplingIntegration:
         url = f'{self.base_url}/platform/api/userinfo'
         return self._execute_request('GET', url)
 
-    @staticmethod
-    def _webhook_company_updated(data):
+    def get_groups(self):
+        """
+        [
+          {
+            "id": "5f397ed33ca04e4ab23246c2",
+            "spokeId": "123456xvbnm12345678912354939",
+            "name": "GroupTest3",
+            "users": [],
+            "version": "t4lz8cjhc54ludro"
+          },
+          {
+            "id": "5f397f3b3ca04e478d4575ad",
+            "spokeId": "lkjwbfskjsdbllskdb",
+            "name": "GroupTest4",
+            "users": [
+              "5c8f7f06c592917aeee1ea9f"
+            ],
+            "version": "uu8ccavwbsb8stfn"
+          }
+        ]
+        """
+        url = 'https://api.rippling.com/platform/api/groups'
+        return self._execute_request('GET', url)
+
+    # company
+    def _webhook_company_updated(self, data):
         """
         Handle incoming event about a company being updated.
         """
@@ -108,8 +145,7 @@ class RipplingIntegration:
                 company.primary_email = company_primary_email
                 company.save()
 
-    @staticmethod
-    def _webhook_company_deleted(data):
+    def _webhook_company_deleted(self, data):
         """
         Handle incoming event about a company being deleted.
         """
@@ -123,11 +159,9 @@ class RipplingIntegration:
                 company.primary_email = company_primary_email
                 company.save()
 
-            company.deleted = True
-            company.save()
+            company.delete()
 
-    @staticmethod
-    def _webhook_company_created(data):
+    def _webhook_company_created(self, data):
         """
         Handle incoming event about a company being created.
         """
@@ -141,8 +175,8 @@ class RipplingIntegration:
                 company.primary_email = company_primary_email
                 company.save()
 
-    @staticmethod
-    def _webhook_employee_created(data):
+    # employee
+    def _webhook_employee_created(self, data):
         """
         Handle incoming event about an employee being created.
         """
@@ -162,8 +196,17 @@ class RipplingIntegration:
                 employee_id=id
             )[0]
 
-    @staticmethod
-    def _webhook_employee_deleted(data):
+            # get the employee data
+            access_token = self.get_company_access_token(company_id)
+            self.access_token = access_token
+            employee_data = self.get_employee(id)
+            employee.given_name = employee_data.get('firstName')
+            employee.family_name = employee_data.get('lastName')
+            employee.updated_at = employee_data.get('updatedAt')
+            employee.created_at = employee_data.get('createdAt')
+            employee.save(update_fields=['given_name', 'family_name', 'updated_at', 'created_at'])
+
+    def _webhook_employee_deleted(self, data):
         """
         Handle incoming event about an employee being deleted.
         """
@@ -181,11 +224,9 @@ class RipplingIntegration:
                 company=company,
                 employee_id=id
             )[0]
-            employee.deleted = True
-            employee.save()
+            employee.delete()
 
-    @staticmethod
-    def _webhook_employee_updated(data):
+    def _webhook_employee_updated(self, data):
         """
         Handle incoming event about an employee being updated.
         """
@@ -204,8 +245,18 @@ class RipplingIntegration:
                 employee_id=id
             )[0]
 
-    @staticmethod
-    def _webhook_group_updated(data):
+            # get the employee data
+            access_token = self.get_company_access_token(company_id)
+            self.access_token = access_token
+            employee_data = self.get_employee(id)
+            employee.given_name = employee_data.get('firstName')
+            employee.family_name = employee_data.get('lastName')
+            employee.updated_at = employee_data.get('updatedAt')
+            employee.created_at = employee_data.get('createdAt')
+            employee.save(update_fields=['given_name', 'family_name', 'updated_at', 'created_at'])
+
+    # group
+    def _webhook_group_updated(self, data):
         """
         Handle incoming event about a group being updated.
         """
@@ -219,13 +270,24 @@ class RipplingIntegration:
                 company.primary_email = company_primary_email
                 company.save()
 
-            group = RipplingGroup.objects.get_or_create(
+            group_record = RipplingGroup.objects.get_or_create(
                 company=company,
                 group_id=id
             )[0]
 
-    @staticmethod
-    def _webhook_group_created(data):
+            # get the group name
+            access_token = self.get_company_access_token(company_id)
+            self.access_token = access_token
+            group_data = self.get_groups()
+            for group in group_data:
+                if group.get('id') == id:
+                    group_name = group.get('name')
+                    group_record.name = group_name
+                    group_record.users = group.get('users')
+                    group_record.save()
+                    break
+
+    def _webhook_group_created(self, data):
         """
         Handle incoming event about a group being created.
         """
@@ -239,13 +301,23 @@ class RipplingIntegration:
                 company.primary_email = company_primary_email
                 company.save()
 
-            group = RipplingGroup.objects.get_or_create(
+            group_record = RipplingGroup.objects.get_or_create(
                 company=company,
                 group_id=id
             )[0]
 
-    @staticmethod
-    def _webhook_group_deleted(data):
+            access_token = self.get_company_access_token(company_id)
+            self.access_token = access_token
+            group_data = self.get_groups()
+            for group in group_data:
+                if group.get('id') == id:
+                    group_name = group.get('name')
+                    group_record.name = group_name
+                    group_record.users = group.get('users')
+                    group_record.save()
+                    break
+
+    def _webhook_group_deleted(self, data):
         """
         Handle incoming event about a group being deleted.
         """
@@ -263,5 +335,4 @@ class RipplingIntegration:
                 company=company,
                 group_id=id
             )[0]
-            group.deleted = True
-            group.save()
+            group.delete()

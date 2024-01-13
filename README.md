@@ -55,14 +55,14 @@ File `app/views.py`
 File `app/urls.py`
 ```python
 from django.urls import path
-from . import views
-```python
-from .views import handle_app_install, handle_oauth_login, handle_incoming_webhook
+from .views import handle_app_install, handle_oauth_login, handle_incoming_webhook, secure_page
+from django.views.decorators.csrf import csrf_exempt
 
 urlpatterns = [
     path('install/', handle_app_install),
-    path('sso', handle_oauth_login),
+    path('sso/', csrf_exempt(handle_oauth_login)),
     path('webhook/', csrf_exempt(handle_incoming_webhook)),
+    path('secure-page/', secure_page),
 ]
 ```
 
@@ -96,6 +96,7 @@ RIPPLING_CLIENT_ID = os.environ.get('RIPPLING_CLIENT_ID', 'xxx')
 RIPPLING_CLIENT_SECRET = os.environ.get('RIPPLING_CLIENT_SECRET', 'xxx')
 RIPPLING_REDIRECT_URI = os.environ.get('RIPPLING_REDIRECT_URI', 'https://xxx.ngrok-free.app/integration/install/')
 RIPPLING_BASE_URL = os.environ.get('RIPPLING_BASE_URL', 'https://api.rippling.com')
+RIPPLING_APP_SLUG = os.environ.get('RIPPLING_APP_SLUG', 'your-app-slug')
 ```
 
 ### Add the Rippling Client-ID and Client-Secret to the .env file

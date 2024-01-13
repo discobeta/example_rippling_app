@@ -3,7 +3,7 @@ from django.contrib import admin
 
 
 class RipplingCompanyAdmin(admin.ModelAdmin):
-	list_display = ['id', 'created_at', 'updated_at', 'is_access_token_valid']
+	list_display = ['id', 'company_name', 'primary_email', 'created_at', 'updated_at', 'is_access_token_valid']
 	read_only_fields = ['created_at', 'updated_at']
 	pass
 
@@ -12,7 +12,7 @@ class RipplingCompanyAdmin(admin.ModelAdmin):
 admin.site.register(RipplingCompany, RipplingCompanyAdmin)
 
 class RipplingEmployeeAdmin(admin.ModelAdmin):
-	list_display = ['id', 'company',  'name', 'email', 'created_at', 'updated_at']
+	list_display = ['id', 'company',  'family_name', 'given_name', 'email', 'employee_id', 'user', 'company', 'created_at', 'updated_at']
 	read_only_fields = ['created_at', 'updated_at']
 	pass
 admin.site.register(RipplingEmployee, RipplingEmployeeAdmin)
