@@ -26,9 +26,14 @@ SECRET_KEY = 'django-insecure-amqftr-6!&05=2fsker7i)tk1&3b(vwj(t!6b@l#p3(+8+0=(4
 DEBUG = True
 
 ALLOWED_HOSTS = [
-    '104a-173-56-106-87.ngrok-free.app'
+    '641d-173-56-106-87.ngrok-free.app',
+    'localhost',
 ]
 
+CSRF_TRUSTED_ORIGINS = [
+    "https://641d-173-56-106-87.ngrok-free.app",
+    "http://localhost",
+]
 
 # Application definition
 
@@ -127,5 +132,6 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 RIPPLING_CLIENT_ID = os.environ.get('RIPPLING_CLIENT_ID', 'xxx')
 RIPPLING_CLIENT_SECRET = os.environ.get('RIPPLING_CLIENT_SECRET', 'xxx')
-RIPPLING_REDIRECT_URI = os.environ.get('RIPPLING_REDIRECT_URI', 'https://104a-173-56-106-87.ngrok-free.app/integration/install/')
+RIPPLING_REDIRECT_URI = os.environ.get('RIPPLING_REDIRECT_URI', 'https://641d-173-56-106-87.ngrok-free.app/integration/install/')
 RIPPLING_BASE_URL = os.environ.get('RIPPLING_BASE_URL', 'https://api.rippling.com')
+RIPPLING_APP_SLUG = os.environ.get('RIPPLING_APP_SLUG', 'asaftest9f30')
