@@ -105,27 +105,45 @@ def handle_oauth_login(request):
     try:
         employee_record = RipplingEmployee.objects.get(employee_id=current_user.get('id'))
     except:
-        return JsonResponse({'error': 'Employee not found.'})
+        # find the commpany record
+        company_record = None
+        try:
+            company_record = RipplingCompany.objects.get(company_id=current_user.get('company'))
+        except:
+            return JsonResponse({'error': 'Company not found.'})
+        # creaet the employee record
+        employee_record = RipplingEmployee.objects.create(
+            company=company_record,
+            employee_id=current_user.get('id'),
+            role_id=role_id
+        )
 
     # get the userinfo
     user_info = rippling.get_employee(employee_record.employee_id)
+    current_user = rippling.get_current_user()
     employee_record.given_name = user_info.get('firstName')
     employee_record.family_name = user_info.get('lastName')
+    employee_record.email = current_user.get('workEmail')
     employee_record.updated_at = user_info.get('updatedAt')
     employee_record.created_at = user_info.get('createdAt')
-    employee_record.save(update_fields=['given_name', 'family_name', 'updated_at', 'created_at'])
+    employee_record.save(update_fields=['given_name', 'family_name', 'email', 'updated_at', 'created_at'])
 
     # if the employee record doesn't have a user, create one
     if not employee_record.user:
-        # create the user
-        user = get_user_model().objects.create_user(
-            username=f"{employee_record.employee_id}:{employee_record.company.company_id}",
-            email=employee_record.email,
-            first_name=employee_record.given_name,
-            last_name=employee_record.family_name,
-        )
-        employee_record.user = user
-        employee_record.save()
+        try:
+            user = get_user_model().objects.get(username=f"{employee_record.employee_id}:{employee_record.company.company_id}")
+            employee_record.user = user
+            employee_record.save()
+        except:
+            # create the user
+            user = get_user_model().objects.create_user(
+                username=f"{employee_record.employee_id}:{employee_record.company.company_id}",
+                email=employee_record.email,
+                first_name=employee_record.given_name,
+                last_name=employee_record.family_name,
+            )
+            employee_record.user = user
+            employee_record.save()
 
     login(request, employee_record.user)
     return HttpResponseRedirect('/integration/secure-page/')
@@ -135,8 +153,6 @@ def handle_incoming_webhook(request):
     """
     Handle incoming webhooks from Rippling.
     """
-
-    print("WEBHOOK", request.POST)
 
     event_mapping = {
         'employee.created': '_webhook_employee_created',
